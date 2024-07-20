@@ -33,7 +33,7 @@ Main directory PocketBook contains:
     - run.sh
     - clean.sh scripts
 
-The project is compiled with Qt 6.7.2 Version. Ninja and CMAKE_PREFIX_PATH should be specified for build
+The project is compiled with Qt 6.7.2 Version. Ninja and CMAKE_PREFIX_PATH should be specified for build(the path to the Qt biniaries should be added to CMAKE_PREFIX_PATH for example /home/user_name/Qt/6.7.2/gcc_64)
 
 PocketBook Usage: ./pocketbook [options]
 Description: Pocket Book application for compressing/decompressing 8bit '*.bmp' files

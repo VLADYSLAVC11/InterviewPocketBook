@@ -24,10 +24,14 @@ namespace
 {
 
 // Constants
-static constexpr std::size_t BPM_HEADER_OFFSET = 0x00;
-static constexpr std::size_t INFO_HEADER_OFFSET = sizeof(PocketBook::BmpHeader);
-static constexpr std::uint16_t UNCOMPRESSED_SIGNATURE = 0x4D42;
-static constexpr std::uint16_t COMPRESSED_SIGNATURE = 0x4142;
+static constexpr std::size_t    BPM_HEADER_OFFSET        = 0x00;
+static constexpr std::size_t    INFO_HEADER_OFFSET       = sizeof(PocketBook::BmpHeader);
+static constexpr std::uint16_t  UNCOMPRESSED_SIGNATURE   = 0x4D42;
+static constexpr std::uint16_t  COMPRESSED_SIGNATURE     = 0x4142;
+static constexpr std::uint8_t   WHITE_PIXEL              = 0xFF;
+static constexpr std::uint8_t   BLACK_PIXEL              = 0x00;
+static constexpr std::uint32_t  WHITE_4PIXELS            = 0xFFFFFFFF;
+static constexpr std::uint32_t  BLACK_4PIXELS            = 0x00000000;
 
 // RowIndex encodes each exact row as separate bit [0:n-1]
 // The bit is set to 1 when row contains only white pixels
@@ -74,18 +78,18 @@ struct RowIndex
         ,   PocketBook::IProgressNotifier * _progressNotifier = nullptr
         )
     {
-        std::vector<std::uint8_t> whiteRowPattern(_raw.width, 0xFF);
-        if(_raw.padding > 0)
-            for(int i = _raw.width - _raw.padding; i < _raw.width; ++i )
-                whiteRowPattern[i] = 0x00; // Fill whiteRowPattern with zero padding if needed
+        std::vector<std::uint8_t> whiteRowPattern(_raw.getActualWidth(), WHITE_PIXEL);
+        if(_raw.getPadding() > 0)
+            for(int i = _raw.Width; i < _raw.getActualWidth(); ++i )
+                whiteRowPattern[i] = BLACK_PIXEL; // Fill whiteRowPattern with zero padding if needed
 
-        RowIndex index(_raw.height);
-        const std::uint8_t * rowStartPtr = _raw.data;
-        for(int rowIndex = 0; rowIndex < _raw.height; ++rowIndex)
+        RowIndex index(_raw.getActualHeight());
+        const std::uint8_t * rowStartPtr = _raw.Data;
+        for(int rowIndex = 0; rowIndex < _raw.getActualHeight(); ++rowIndex)
         {
-            index.setRowIsEmpty(rowIndex, memcmp(rowStartPtr, whiteRowPattern.data(), _raw.width) == 0);
+            index.setRowIsEmpty(rowIndex, memcmp(rowStartPtr, whiteRowPattern.data(), whiteRowPattern.size()) == 0);
 
-            rowStartPtr += _raw.width;
+            rowStartPtr += _raw.getActualWidth();
             if(_progressNotifier)
             {
                 using namespace std::chrono_literals;
@@ -360,18 +364,9 @@ bool BmpProxy::provideRawImageData(RawImageData & _out) const
     if(!pixelData)
         return false;
 
-    memset(&_out, 0, sizeof(RawImageData));
-
-    // Width should be multiple of 4bytes
-    _out.width = getWidth();
-    if(_out.width % 4 != 0)
-    {
-        _out.padding = 4 - (_out.width % 4);
-        _out.width += _out.padding;
-    }
-
-    _out.height = getHeight();
-    _out.data = pixelData;
+    _out.Width = getWidth();
+    _out.Height = getHeight();
+    _out.Data = pixelData;
 
     return true;
 }
@@ -402,7 +397,7 @@ bool BmpProxy::compress(const std::string& _outputFilePath, IProgressNotifier * 
     try
     {
         if(_progressNotifier)
-            _progressNotifier->init(0, rawImageData.height << 1);
+            _progressNotifier->init(0, rawImageData.getActualHeight() << 1);
 
         RowIndex index = RowIndex::createFromRawImageData(rawImageData, _progressNotifier);
         header.DataOffset = header.IndexOffset + index.getIndexSizeInBytes();
@@ -411,22 +406,24 @@ bool BmpProxy::compress(const std::string& _outputFilePath, IProgressNotifier * 
         DynamicBitset compressedPixelData(infoHeader.ImageSize, 0x00);
 
         std::size_t currentBitPos = 0;
-        for(int rowIndex = 0; rowIndex < rawImageData.height; ++rowIndex)
+        for(int rowIndex = 0; rowIndex < rawImageData.getActualHeight(); ++rowIndex)
         {
-            const auto * rawPixels = reinterpret_cast<const std::uint32_t*>(rawImageData.data + (rowIndex * rawImageData.width));
+            const auto * rawPixels = reinterpret_cast<const std::uint32_t*>(
+                rawImageData.Data + rowIndex * rawImageData.getActualWidth()
+            );
             if(!index.testRowIsEmpty(rowIndex))
             {
-                for(int blockIndex = 0; blockIndex < rawImageData.width / sizeof(std::uint32_t); ++blockIndex)
+                for(int blockIndex = 0; blockIndex < rawImageData.getActualWidth() / sizeof(std::uint32_t); ++blockIndex)
                 {
                     std::uint32_t blockValue = *rawPixels;
                     switch(blockValue)
                     {
-                        case 0x00000000:
+                        case BLACK_4PIXELS:
                             compressedPixelData.set(currentBitPos++, true);
                             compressedPixelData.set(currentBitPos++, false);
                             break;
 
-                        case 0xFFFFFFFF:
+                        case WHITE_4PIXELS:
                             compressedPixelData.set(currentBitPos++, false);
                             break;
 
@@ -450,7 +447,7 @@ bool BmpProxy::compress(const std::string& _outputFilePath, IProgressNotifier * 
             {
                 using namespace std::chrono_literals;
                 std::this_thread::sleep_for(3ms); // For progress bar demonstration
-                _progressNotifier->notifyProgress(rawImageData.height + rowIndex);
+                _progressNotifier->notifyProgress(rawImageData.getActualHeight() + rowIndex);
             }
 
         }
@@ -511,14 +508,11 @@ bool BmpProxy::decompress(const std::string& _outputFilePath, IProgressNotifier 
         BmpInfoHeader infoHeader = getInfoHeader();
         std::uint32_t compressedImageSize = infoHeader.ImageSize;
 
-        int padding = 0;
-        if(infoHeader.Width % 4 != 0)
-            padding = 4 - (infoHeader.Width % 4);
-
+        int padding = RawImageData::calculatePadding(infoHeader.Width);
         std::vector<std::uint8_t> whiteRowPattern(infoHeader.Width + padding, 0xFF);
         if(padding > 0)
             for(int i = infoHeader.Width; i < infoHeader.Width + padding; ++i )
-                whiteRowPattern[i] = 0x00; // Fill whiteRowPattern with zero padding if needed
+                whiteRowPattern[i] = BLACK_PIXEL; // Fill whiteRowPattern with zero padding if needed
 
         DynamicBitset pixelDataCompressed(getPixelData(), compressedImageSize);
 
@@ -542,11 +536,11 @@ bool BmpProxy::decompress(const std::string& _outputFilePath, IProgressNotifier 
                 int numBytesRestored = 0;
                 while(numBytesRestored < infoHeader.Width + padding)
                 {
-                    std::uint32_t block = 0x00000000;
+                    std::uint32_t block = BLACK_4PIXELS;
                     bool b0 = pixelDataCompressed.test(currentBitPos++);
                     if(b0 == false)
                     {
-                        block = 0xFFFFFFFF;
+                        block = WHITE_4PIXELS;
                     }
                     else
                     {

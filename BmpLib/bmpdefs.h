@@ -33,10 +33,30 @@ struct BmpInfoHeader
 
 struct RawImageData
 {
-    int width; // image width in pixels
-    int height; // image height in pixels
-    int padding; // zero padding for each row
-    const unsigned char * data; // Pointer to image data. data[j * width + i] is color of pixel in row j and column i.
+    int getActualWidth() const
+    {
+        return Width + getPadding();
+    }
+
+    static int calculatePadding(int _width)
+    {
+        static constexpr std::size_t alignment = sizeof(std::uint32_t);
+        return _width % alignment == 0 ? 0 : alignment - (_width % alignment);
+    }
+
+    int getPadding() const
+    {
+        return calculatePadding(Width);
+    }
+
+    int getActualHeight() const
+    {
+        return Height;
+    }
+
+    int Width; // image width in pixels
+    int Height; // image height in pixels
+    const unsigned char * Data; // Pointer to image data. data[j * width + i] is color of pixel in row j and column i.
 };
 
 } // namespace PocketBook

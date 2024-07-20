@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 project(PocketBook LANGUAGES CXX)
+SET(CMAKE_CXX_STANDARD 17)
 
 find_package(Qt6 REQUIRED COMPONENTS Qml Quick QuickControls2)
 

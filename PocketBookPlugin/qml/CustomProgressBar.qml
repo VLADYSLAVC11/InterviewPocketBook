@@ -12,7 +12,7 @@ ProgressBar {
 
     anchors.horizontalCenter: parent.horizontalCenter
     anchors.bottom: parent.bottom
-    anchors.bottomMargin: 10
+    anchors.bottomMargin: 15
 
     background: Rectangle {
         implicitWidth: 200
@@ -22,16 +22,10 @@ ProgressBar {
     }
 
     contentItem: Item {
+        id: _contentItem
+
         implicitWidth: 200
         implicitHeight: 4
-
-        Text {
-            id: messageLabel
-            text: progressText
-            wrapMode: Text.WordWrap
-            horizontalAlignment: Text.AlignHCenter
-            anchors.horizontalCenter: parent.horizontalCenter
-        }
 
         Rectangle {
             width: progressBar.visualPosition * parent.width
@@ -65,6 +59,16 @@ ProgressBar {
                     running: progressBar.indeterminate
                 }
             }
+        }
+
+        Text {
+            id: messageLabel
+
+            anchors.horizontalCenter: parent.horizontalCenter
+            horizontalAlignment: Text.AlignHCenter
+            text: progressText
+            wrapMode: Text.WordWrap
+            anchors.top: _contentItem.bottom
         }
     }
 }

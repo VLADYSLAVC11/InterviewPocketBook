@@ -22,6 +22,7 @@
 
 namespace
 {
+
 // Constants
 static constexpr std::size_t BPM_HEADER_OFFSET = 0x00;
 static constexpr std::size_t INFO_HEADER_OFFSET = sizeof(PocketBook::BmpHeader);
@@ -69,9 +70,9 @@ struct RowIndex
     }
 
     static RowIndex createFromRawImageData(
-        PocketBook::RawImageData _raw
-        , 	PocketBook::IProgressNotifier * _progressNotifier = nullptr
-    )
+            PocketBook::RawImageData _raw
+        ,   PocketBook::IProgressNotifier * _progressNotifier = nullptr
+        )
     {
         std::vector<std::uint8_t> whiteRowPattern(_raw.width, 0xFF);
         if(_raw.padding > 0)
@@ -104,7 +105,8 @@ bool RollbackFile(const std::string & _filePath, FILE * _file)
     fclose(_file);
     return remove(_filePath.c_str()) == 0;
 }
-}
+
+} // namespace
 
 namespace PocketBook {
 
@@ -166,8 +168,8 @@ struct BmpProxy::ProxyImpl
 
         // Read Pixel Data
         std::size_t realPixelDataSize = impl->m_infoHeader.ImageSize
-                                        ? impl->m_infoHeader.ImageSize
-                                        : impl->m_infoHeader.Height * impl->m_infoHeader.Width;
+            ? impl->m_infoHeader.ImageSize
+            : impl->m_infoHeader.Height * impl->m_infoHeader.Width;
 
         impl->m_pixelData.resize(realPixelDataSize, 0x00);
         fseek(impl->m_fileHandle, impl->m_header.DataOffset, SEEK_SET);
@@ -419,24 +421,25 @@ bool BmpProxy::compress(const std::string& _outputFilePath, IProgressNotifier * 
                     std::uint32_t blockValue = *rawPixels;
                     switch(blockValue)
                     {
-                    case 0x00000000:
-                        compressedPixelData.set(currentBitPos++, true);
-                        compressedPixelData.set(currentBitPos++, false);
-                        break;
+                        case 0x00000000:
+                            compressedPixelData.set(currentBitPos++, true);
+                            compressedPixelData.set(currentBitPos++, false);
+                            break;
 
-                    case 0xFFFFFFFF:
-                        compressedPixelData.set(currentBitPos++, false);
-                        break;
+                        case 0xFFFFFFFF:
+                            compressedPixelData.set(currentBitPos++, false);
+                            break;
 
-                    default:
-                        compressedPixelData.set(currentBitPos++, true);
-                        compressedPixelData.set(currentBitPos++, true);
-                        for(int bitIndex = 0; bitIndex < sizeof(std::uint32_t) * DynamicBitset::BITS_PER_BLOCK; ++bitIndex)
-                        {
-                            bool bitValue = (blockValue & (1 << bitIndex)) != 0;
-                            compressedPixelData.set(currentBitPos++, bitValue);
-                        }
-                        break;
+                        default:
+                            compressedPixelData.set(currentBitPos++, true);
+                            compressedPixelData.set(currentBitPos++, true);
+
+                            for(int bitIndex = 0; bitIndex < sizeof(std::uint32_t) * DynamicBitset::BITS_PER_BLOCK; ++bitIndex)
+                            {
+                                bool bitValue = (blockValue & (1 << bitIndex)) != 0;
+                                compressedPixelData.set(currentBitPos++, bitValue);
+                            }
+                            break;
                     }
 
                     ++rawPixels;

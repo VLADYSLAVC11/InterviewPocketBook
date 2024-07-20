@@ -22,16 +22,17 @@ void CompressionModel::compress(const QString& _filePath)
     const auto outFilePath = changeFileExtension(_filePath, extension);
     if(!removeFileIfExists(outFilePath))
     {
-        //TODO [cvs]: handle the situation if the file with the output name elready exists and can't be removed;
+        emit errorOccured("Unable to complete operation");
         return;
     }
 
     auto progressModel = m_progressModel;
     assert(progressModel);
 
-    std::thread worker {[_filePath, outFilePath, progressModel, this]{
+    std::thread worker {[_filePath, outFilePath, progressModel, this]
+    {
         bool compressed = false;
-        QString errorMsg;
+        QString errorMsg = "Unable to compress file";
 
         try
         {
@@ -64,9 +65,10 @@ void CompressionModel::decompress(const QString& _filePath)
     auto progressModel = m_progressModel;
     assert(m_progressModel);
 
-    std::thread worker {[_filePath, outFilePath, progressModel, this] {
+    std::thread worker {[_filePath, outFilePath, progressModel, this]
+    {
         bool decompressed = false;
-        QString errorMsg;
+        QString errorMsg = "Unable to decompress file";
 
         try
         {

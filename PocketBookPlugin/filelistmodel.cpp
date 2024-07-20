@@ -45,13 +45,13 @@ QVariant FileListModel::data(const QModelIndex &_index, int _role) const
     const QFileInfo fileInfo = m_fileInfoList.at(_index.row());
     switch (_role)
     {
-        case Qt::DisplayRole:
-        case FileNameRole:
-            return fileInfo.fileName();
-        case FilePathRole:
-            return fileInfo.filePath();
-        case FileSizeRole:
-            return toKbts(fileInfo.size());
+    case Qt::DisplayRole:
+    case FileNameRole:
+        return fileInfo.fileName();
+    case FilePathRole:
+        return fileInfo.filePath();
+    case FileSizeRole:
+        return toKbts(fileInfo.size());
     }
 
     return {};

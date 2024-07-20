@@ -8,45 +8,45 @@
 namespace PocketBook {
 
 class FileError
-	: public std::runtime_error
+    : public std::runtime_error
 {
 public:
-	FileError(const std::string & _message);
+    FileError(const std::string & _message);
 };
 
 class FileDoesntExistError
-	: public FileError
+    : public FileError
 {
 public:
-	FileDoesntExistError(const std::string & _filePath);
+    FileDoesntExistError(const std::string & _filePath);
 };
 
 class FileCreationError
-	: public FileError
+    : public FileError
 {
 public:
-	FileCreationError(const std::string & _filePath);
+    FileCreationError(const std::string & _filePath);
 };
 
 class InvalidBmpHeaderError
-	: public FileError
+    : public FileError
 {
 public:
-	InvalidBmpHeaderError(const std::string & _message = std::string());
+    InvalidBmpHeaderError(const std::string & _message = std::string());
 };
 
 class InvalidInfoHeaderError
-	: public FileError
+    : public FileError
 {
 public:
-	InvalidInfoHeaderError(const std::string & _message = std::string());
+    InvalidInfoHeaderError(const std::string & _message = std::string());
 };
 
 class InvalidPixelDataError
-	: public FileError
+    : public FileError
 {
 public:
-	InvalidPixelDataError(const std::string & _message = std::string());
+    InvalidPixelDataError(const std::string & _message = std::string());
 };
 
 } // namespace PocketBook

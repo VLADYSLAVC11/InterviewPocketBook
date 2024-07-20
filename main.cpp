@@ -15,28 +15,28 @@ int main(int argc, char *argv[])
     QGuiApplication app(argc, argv);
     QQuickStyle::setStyle("Basic");
 
-	// Setup command line parser
-	QCommandLineParser parser;
-	parser.setApplicationDescription("Description: Pocket Book application for compressing/decompressing 8bit '*.bmp' files");
-	parser.addHelpOption();
-	parser.addVersionOption();
-	QCommandLineOption dirOption(
-			QStringList() << "d" << "dir"
-		,	QCoreApplication::translate("main", "Scan bmp, barch and png files in <directory>.")
-		,	QCoreApplication::translate("main", "directory"));
-	parser.addOption(dirOption);
+    // Setup command line parser
+    QCommandLineParser parser;
+    parser.setApplicationDescription("Description: Pocket Book application for compressing/decompressing 8bit '*.bmp' files");
+    parser.addHelpOption();
+    parser.addVersionOption();
+    QCommandLineOption dirOption(
+        QStringList() << "d" << "dir"
+        ,	QCoreApplication::translate("main", "Scan bmp, barch and png files in <directory>.")
+        ,	QCoreApplication::translate("main", "directory"));
+    parser.addOption(dirOption);
 
-	// Process the actual command line arguments given by the user
-	parser.process(app);
+    // Process the actual command line arguments given by the user
+    parser.process(app);
 
-	QString directoryToScanPath = QDir::currentPath();
-	if(parser.isSet(dirOption))
-	{
-		QString targetDir = parser.value(dirOption);
-		QFileInfo dirInfo(targetDir);
-		if(dirInfo.exists() || dirInfo.isDir())
-			directoryToScanPath = targetDir;
-	}
+    QString directoryToScanPath = QDir::currentPath();
+    if(parser.isSet(dirOption))
+    {
+        QString targetDir = parser.value(dirOption);
+        QFileInfo dirInfo(targetDir);
+        if(dirInfo.exists() || dirInfo.isDir())
+            directoryToScanPath = targetDir;
+    }
 
     QQuickView view;
     QQmlContext* context = view.rootContext();

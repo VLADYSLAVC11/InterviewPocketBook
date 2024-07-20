@@ -14,9 +14,9 @@ class QTimer;
 namespace PocketBook::Ui {
 
 class FileListModel
-	: public QAbstractListModel
+    : public QAbstractListModel
 {
-    Q_OBJECT
+Q_OBJECT
     Q_PROPERTY(QString folder READ getFolder WRITE setFolder NOTIFY folderChanged)
     QML_ELEMENT
 

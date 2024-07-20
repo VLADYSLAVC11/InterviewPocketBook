@@ -11,7 +11,7 @@ namespace PocketBook::Ui {
 
 class CompressionModel : public QObject
 {
-    Q_OBJECT
+Q_OBJECT
     Q_PROPERTY(ProgressModel* progressModel READ getProgressModel WRITE setProgressModel)
     QML_ELEMENT
 

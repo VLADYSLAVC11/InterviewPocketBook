@@ -26,7 +26,7 @@ void CompressionModel::compress(const QString& _filePath)
         return;
     }
 
-	auto progressModel = m_progressModel;
+    auto progressModel = m_progressModel;
     assert(progressModel);
 
     std::thread worker {[_filePath, outFilePath, progressModel, this]{
@@ -35,7 +35,7 @@ void CompressionModel::compress(const QString& _filePath)
 
         try
         {
-			progressModel->setText("Compressing");
+            progressModel->setText("Compressing");
             auto bmpImage = BmpProxy::createFromBmp(_filePath.toStdString());
             compressed = bmpImage.compress(outFilePath.toStdString(), progressModel);
         }
@@ -61,32 +61,32 @@ void CompressionModel::decompress(const QString& _filePath)
     const QString extension = ".bmp";
     auto outFilePath = getUniqueFilePath(_filePath, extension);
 
-	auto progressModel = m_progressModel;
+    auto progressModel = m_progressModel;
     assert(m_progressModel);
 
     std::thread worker {[_filePath, outFilePath, progressModel, this] {
-		bool decompressed = false;
-		QString errorMsg;
+        bool decompressed = false;
+        QString errorMsg;
 
-		try
-		{
-			progressModel->setText("Decompressing");
-        	auto barchImage = BmpProxy::createFromBarch(_filePath.toStdString());
-			decompressed = barchImage.decompress(outFilePath.toStdString(), progressModel);
-		}
-		catch( const FileError & _err )
-		{
-			errorMsg = QString(_err.what());
-		}
-		catch( ... )
-		{
-			errorMsg = QString("Unexpected Error");
-		}
+        try
+        {
+            progressModel->setText("Decompressing");
+            auto barchImage = BmpProxy::createFromBarch(_filePath.toStdString());
+            decompressed = barchImage.decompress(outFilePath.toStdString(), progressModel);
+        }
+        catch( const FileError & _err )
+        {
+            errorMsg = QString(_err.what());
+        }
+        catch( ... )
+        {
+            errorMsg = QString("Unexpected Error");
+        }
 
-		if(!decompressed)
-		{
-			emit errorOccured(errorMsg);
-		}
+        if(!decompressed)
+        {
+            emit errorOccured(errorMsg);
+        }
     }};
     worker.detach();
 }

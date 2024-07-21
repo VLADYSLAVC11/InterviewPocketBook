@@ -73,15 +73,22 @@ struct RowIndex
         return m_index.data();
     }
 
+    static std::vector<std::uint8_t> getWhiteRowPattern(int _width)
+    {
+        int padding = PocketBook::RawImageData::calculatePadding(_width);
+        std::vector<std::uint8_t> whiteRowPattern(_width + padding, WHITE_PIXEL);
+        for(int i = _width; i < _width + padding; ++i )
+            whiteRowPattern[i] = BLACK_PIXEL; // Fill whiteRowPattern with zero padding if needed
+
+        return whiteRowPattern;
+    }
+
     static RowIndex createFromRawImageData(
             PocketBook::RawImageData _raw
         ,   PocketBook::IProgressNotifier * _progressNotifier = nullptr
         )
     {
-        std::vector<std::uint8_t> whiteRowPattern(_raw.getActualWidth(), WHITE_PIXEL);
-        if(_raw.getPadding() > 0)
-            for(int i = _raw.Width; i < _raw.getActualWidth(); ++i )
-                whiteRowPattern[i] = BLACK_PIXEL; // Fill whiteRowPattern with zero padding if needed
+        const auto whiteRowPattern = RowIndex::getWhiteRowPattern(_raw.Width);
 
         RowIndex index(_raw.getActualHeight());
         const std::uint8_t * rowStartPtr = _raw.Data;
@@ -93,7 +100,7 @@ struct RowIndex
             if(_progressNotifier)
             {
                 using namespace std::chrono_literals;
-                std::this_thread::sleep_for(2ms); // For progress bar demonstration
+                std::this_thread::sleep_for(1ms); // For progress bar demonstration
                 _progressNotifier->notifyProgress(rowIndex);
             }
         }
@@ -446,7 +453,7 @@ bool BmpProxy::compress(const std::string& _outputFilePath, IProgressNotifier * 
             if(_progressNotifier)
             {
                 using namespace std::chrono_literals;
-                std::this_thread::sleep_for(3ms); // For progress bar demonstration
+                std::this_thread::sleep_for(1ms); // For progress bar demonstration
                 _progressNotifier->notifyProgress(rawImageData.getActualHeight() + rowIndex);
             }
 
@@ -509,10 +516,7 @@ bool BmpProxy::decompress(const std::string& _outputFilePath, IProgressNotifier 
         std::uint32_t compressedImageSize = infoHeader.ImageSize;
 
         int padding = RawImageData::calculatePadding(infoHeader.Width);
-        std::vector<std::uint8_t> whiteRowPattern(infoHeader.Width + padding, 0xFF);
-        if(padding > 0)
-            for(int i = infoHeader.Width; i < infoHeader.Width + padding; ++i )
-                whiteRowPattern[i] = BLACK_PIXEL; // Fill whiteRowPattern with zero padding if needed
+        const auto whiteRowPattern = RowIndex::getWhiteRowPattern(infoHeader.Width);
 
         DynamicBitset pixelDataCompressed(getPixelData(), compressedImageSize);
 
@@ -564,7 +568,7 @@ bool BmpProxy::decompress(const std::string& _outputFilePath, IProgressNotifier 
             if(_progressNotifier)
             {
                 using namespace std::chrono_literals;
-                std::this_thread::sleep_for(3ms); // For progress bar demonstration
+                std::this_thread::sleep_for(2ms); // For progress bar demonstration
                 _progressNotifier->notifyProgress(rowIndex);
             }
         }

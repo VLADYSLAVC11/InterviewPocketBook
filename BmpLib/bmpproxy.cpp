@@ -177,10 +177,12 @@ struct BmpProxy::ProxyImpl
         if(impl->m_header.DataOffset < colorTableOffset + impl->m_infoHeader.ColorsUsed * bmpColorInfoSize)
             throw InvalidBmpHeaderError(std::string("Invalid Data Offset: ") + std::to_string(impl->m_header.DataOffset));
 
+        int padding = RawImageData::calculatePadding(impl->m_infoHeader.Width);
+
         // Read Pixel Data
         std::size_t realPixelDataSize = impl->m_infoHeader.ImageSize
             ? impl->m_infoHeader.ImageSize
-            : impl->m_infoHeader.Height * impl->m_infoHeader.Width;
+            : impl->m_infoHeader.Height * (impl->m_infoHeader.Width + padding);
 
         impl->m_pixelData.resize(realPixelDataSize, 0x00);
         fseek(impl->m_fileHandle, impl->m_header.DataOffset, SEEK_SET);

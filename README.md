@@ -47,5 +47,4 @@ Description: Pocket Book application for compressing/decompressing 8bit '*.bmp' 
   * -v, --version          Displays version information.
   * -d, --dir <directory>  Scan bmp, barch and png files in <directory>.
 
-to run application use ./run.sh script which implicitly specify images folder with
-test pictures.
+to run application use ./run.sh script which implicitly specify images folder with test pictures. If something is not working properly please check Demo.mp4 demonstration video.

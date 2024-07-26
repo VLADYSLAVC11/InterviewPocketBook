@@ -292,7 +292,7 @@ struct BmpProxy::ProxyImpl
             fclose(m_fileHandle);
     }
 
-    static std::unique_ptr<ProxyImpl> readBmp(const std::string& _filePath)
+    static std::unique_ptr<ProxyImpl> readImpl(const std::string& _filePath)
     {
         std::unique_ptr<ProxyImpl> impl = std::make_unique<ProxyImpl>();
         impl->m_filePath = _filePath;
@@ -319,56 +319,16 @@ struct BmpProxy::ProxyImpl
         else
             ProxyValidator::validateInfoHeader(*impl, actualFileSize);
 
-
-        const int padding = RawImageData::calculatePadding(impl->m_infoHeader.Width);
-
-        // Read Pixel Data
-        std::size_t realPixelDataSize = impl->m_infoHeader.ImageSize
-            ? impl->m_infoHeader.ImageSize
-            : impl->m_infoHeader.Height * (impl->m_infoHeader.Width + padding);
-
-        impl->m_pixelData.resize(realPixelDataSize, 0x00);
-        fseek(impl->m_fileHandle, impl->m_header.DataOffset, SEEK_SET);
-        const bool pixelDataReadCorrectly = (fread(impl->m_pixelData.data(), impl->m_pixelData.size(), 1, impl->m_fileHandle) == 1);
-        if(!pixelDataReadCorrectly)
-            throw InvalidPixelDataError("Unable to read Pixel Data");
-
-        return impl;
-    }
-
-    static std::unique_ptr<ProxyImpl> readBarch(const std::string& _filePath)
-    {
-        std::unique_ptr<ProxyImpl> impl = std::make_unique<ProxyImpl>();
-        impl->m_filePath = _filePath;
-        impl->m_fileHandle = fopen( _filePath.c_str(), "rb" );
-
-        if ( !impl->m_fileHandle )
-            throw FileDoesntExistError(_filePath);
-
-        fseek(impl->m_fileHandle, 0L, SEEK_END);
-        const std::size_t actualFileSize = ftell(impl->m_fileHandle);
-        fseek(impl->m_fileHandle, 0L, SEEK_SET);
-
-        // BMP Header validation
-        const bool headerReadCorrectly = (fread(&impl->m_header, sizeof(m_header), 1, impl->m_fileHandle) == 1);
-        if(!headerReadCorrectly)
-            throw InvalidBmpHeaderError();
-        else
-            ProxyValidator::validateHeader(*impl, actualFileSize);
-
-        // BMP Info Header validation
-        const bool infoHeaderReadCorrectly = (fread(&impl->m_infoHeader, sizeof(m_infoHeader), 1, impl->m_fileHandle) == 1);
-        if(!infoHeaderReadCorrectly)
-            throw InvalidInfoHeaderError();
-        else
-            ProxyValidator::validateInfoHeader(*impl, actualFileSize);
-
-        // Read Index Data
-        std::vector<std::uint8_t> indexData(DynamicBitset::getNumBlocksRequired(impl->m_infoHeader.Height), 0x00);
-        fseek(impl->m_fileHandle, impl->m_header.IndexOffset, SEEK_SET);
-        if(fread(indexData.data(), indexData.size(), 1, impl->m_fileHandle) != 1)
-            throw InvalidPixelDataError("Unable to read Index Data");
-        impl->m_index = std::make_unique<RowIndex>(std::move(indexData));
+        const bool isBarch = (impl->getBmpHeader()->Signature == COMPRESSED_SIGNATURE);
+        if(isBarch)
+        {
+            // Read Index Data
+            std::vector<std::uint8_t> indexData(DynamicBitset::getNumBlocksRequired(impl->m_infoHeader.Height), 0x00);
+            fseek(impl->m_fileHandle, impl->m_header.IndexOffset, SEEK_SET);
+            if(fread(indexData.data(), indexData.size(), 1, impl->m_fileHandle) != 1)
+                throw InvalidPixelDataError("Unable to read Index Data");
+            impl->m_index = std::make_unique<RowIndex>(std::move(indexData));
+        }
 
         // Read Pixel Data Compressed
         impl->m_pixelData.resize(impl->m_infoHeader.ImageSize, 0x00);
@@ -378,6 +338,16 @@ struct BmpProxy::ProxyImpl
             throw InvalidPixelDataError("Unable to read Pixel Data");
 
         return impl;
+    }
+
+    static std::unique_ptr<ProxyImpl> readBmp(const std::string& _filePath)
+    {
+        return readImpl(_filePath);
+    }
+
+    static std::unique_ptr<ProxyImpl> readBarch(const std::string& _filePath)
+    {
+        return readImpl(_filePath);
     }
 
     std::string const & getFilePath() const

@@ -21,6 +21,13 @@ public:
     FileDoesntExistError(const std::string & _filePath);
 };
 
+class FileOpeningError
+    : public FileError
+{
+public:
+    FileOpeningError(const std::string & _filePath);
+};
+
 class FileCreationError
     : public FileError
 {

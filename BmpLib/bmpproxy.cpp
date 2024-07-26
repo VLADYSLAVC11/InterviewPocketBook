@@ -12,13 +12,17 @@
 #include <cassert>
 #include <memory.h>
 
-// TODO : Implement mmap
-// For unix systems we may use mmap implementation instead of simple FILE
+#define _BMP_MMAP_OPTIMIZATION_
+
 #if __unix__ and defined(_BMP_MMAP_OPTIMIZATION_)
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/mman.h>
+#include <fcntl.h>
+#include <unistd.h>
+#define _USE_MMAP_IMPL_
 #endif
+
 
 namespace
 {
@@ -121,6 +125,160 @@ bool RollbackFile(const std::string & _filePath, FILE * _file)
 
 namespace PocketBook {
 
+
+// This class is used to validate Bmp/Barch files during opening process
+struct BmpProxy::ProxyValidator
+{
+    static void validateHeader(ProxyImpl& _impl, std::size_t _fileSize);
+    static void validateInfoHeader(ProxyImpl& _impl, std::size_t _fileSize);
+};
+
+
+#ifdef _USE_MMAP_IMPL_
+struct BmpProxy::ProxyImpl
+{
+    ProxyImpl()
+        : m_fileHandle(0), m_pHeader(nullptr)
+    {
+    }
+
+    ~ProxyImpl()
+    {
+        if(m_pHeader)
+            munmap(m_pHeader, getBmpHeader()->FileSize);
+
+        if(m_fileHandle)
+            close(m_fileHandle);
+    }
+
+    static std::unique_ptr<ProxyImpl> readImpl(const std::string& _filePath)
+    {
+        std::unique_ptr<ProxyImpl> impl;
+        std::size_t actualFileSize = 0;
+
+        try
+        {
+            impl = std::make_unique<ProxyImpl>();
+            impl->m_filePath = _filePath;
+
+            // Open file for reading
+            impl->m_fileHandle = open(_filePath.c_str(), O_RDONLY);
+            impl->m_fileHandle = std::max(0, impl->m_fileHandle);
+
+            struct stat statbuf;
+
+            // Ensure file exists and possible to read properly
+            if ( !impl->m_fileHandle || fstat (impl->m_fileHandle, &statbuf) < 0 )
+                throw FileDoesntExistError(_filePath);
+
+            actualFileSize = statbuf.st_size;
+
+            // Map opened file to memory
+            impl->m_pHeader = mmap(0, actualFileSize, PROT_READ, MAP_PRIVATE, impl->m_fileHandle, 0);
+            if (impl->m_pHeader == MAP_FAILED)
+                throw FileOpeningError(_filePath);
+
+            // BMP Header validation
+            ProxyValidator::validateHeader(*impl, actualFileSize);
+
+            // BMP Info Header validation
+            ProxyValidator::validateInfoHeader(*impl, actualFileSize);
+        }
+        catch( ... )
+        {
+            if( impl->m_pHeader != 0 && impl->m_pHeader != MAP_FAILED )
+                munmap(impl->m_pHeader, actualFileSize);
+
+            if( impl->m_fileHandle != 0 )
+                close(impl->m_fileHandle);
+
+            impl->m_pHeader = nullptr;
+            impl->m_fileHandle = 0;
+
+            throw;
+        }
+
+        return impl;
+    }
+
+    static std::unique_ptr<ProxyImpl> readBmp(const std::string& _filePath)
+    {
+        return readImpl(_filePath);
+    }
+
+    static std::unique_ptr<ProxyImpl> readBarch(const std::string& _filePath)
+    {
+        return readImpl(_filePath);
+    }
+
+    std::string const & getFilePath() const
+    {
+        return m_filePath;
+    }
+
+    const std::uint8_t * getHeaderStart() const
+    {
+        return reinterpret_cast<const std::uint8_t *>(m_pHeader);
+    }
+
+    const BmpHeader * getBmpHeader() const
+    {
+        return reinterpret_cast<const BmpHeader *>(m_pHeader);
+    }
+
+    const BmpInfoHeader * getInfoHeader() const
+    {
+        const std::uint8_t * headerStart = getHeaderStart();
+        return reinterpret_cast<const BmpInfoHeader *>(headerStart + INFO_HEADER_OFFSET);
+    }
+
+    const std::uint8_t * getPixelData() const
+    {
+        if(const auto * header = getBmpHeader())
+            return getHeaderStart() + header->DataOffset;
+
+        return nullptr;
+    }
+
+    const std::uint8_t * getIndexData() const
+    {
+        if(const auto * bmpHeader = getBmpHeader())
+            return getHeaderStart() + bmpHeader->IndexOffset;
+
+        return nullptr;
+    }
+
+    bool checkCompressedRowIsEmpty(std::size_t _rowIndex) const
+    {
+        const auto * infoHeader = getInfoHeader();
+        if(!infoHeader)
+            return false;
+
+        if(_rowIndex >= infoHeader->Height)
+            return false;
+
+        if(const auto * rowIndex = getIndexData())
+        {
+            div_t pos = div(_rowIndex, DynamicBitset::BITS_PER_BLOCK);
+            return (rowIndex[pos.quot] & (1 << pos.rem)) != 0;
+        }
+
+        return false;
+    }
+
+    bool copyUpToOffset(FILE * _dest, long _offset)
+    {
+        if(fwrite(getHeaderStart(), _offset, 1, _dest) == 1)
+            return true;
+
+        return false;
+    }
+
+    std::string m_filePath;
+    int m_fileHandle;
+    void * m_pHeader;
+};
+#else
 struct BmpProxy::ProxyImpl
 {
     ProxyImpl()
@@ -151,33 +309,18 @@ struct BmpProxy::ProxyImpl
         const bool headerReadCorrectly = (fread(&impl->m_header, sizeof(m_header), 1, impl->m_fileHandle) == 1);
         if(!headerReadCorrectly)
             throw InvalidBmpHeaderError();
-        else if(impl->m_header.Signature != UNCOMPRESSED_SIGNATURE) // Check Signature = 'BM'
-            throw InvalidBmpHeaderError(std::string("Unexpected signature: ") + std::to_string(impl->m_header.Signature));
-        else if(impl->m_header.FileSize != actualFileSize)
-            throw InvalidBmpHeaderError(std::string("File size mismatch: ") +
-                "actual[" + std::to_string(actualFileSize) + "] != expected[" + std::to_string(impl->m_header.FileSize) + "]"
-            );
-        else if(impl->m_header.DataOffset < INFO_HEADER_OFFSET + sizeof(BmpInfoHeader))
-            throw InvalidBmpHeaderError(std::string("Invalid Data Offset: ") + std::to_string(impl->m_header.DataOffset));
+        else
+            ProxyValidator::validateHeader(*impl, actualFileSize);
 
         // BMP Info Header validation
         const bool infoHeaderReadCorrectly = (fread(&impl->m_infoHeader, sizeof(m_infoHeader), 1, impl->m_fileHandle) == 1);
         if(!infoHeaderReadCorrectly)
             throw InvalidInfoHeaderError();
-        else if(impl->m_infoHeader.Size < sizeof(BmpInfoHeader)) // Can be > sizeof(BmpInfoHeader) in new bmp versions
-            throw InvalidInfoHeaderError(std::string("Incorrect InfoHeader Size: " + std::to_string(impl->m_infoHeader.Size)));
-        else if(impl->m_infoHeader.BitsPerPixel != 8)
-            throw InvalidInfoHeaderError(std::string("Only 8bit Bmp pictures are supported"));
-        else if(impl->m_infoHeader.ImageSize != 0 && impl->m_infoHeader.Height * impl->m_infoHeader.Width > impl->m_infoHeader.ImageSize)
-            throw InvalidInfoHeaderError(std::string("Unexpected Image Size: " + std::to_string(impl->m_infoHeader.ImageSize)));
+        else
+            ProxyValidator::validateInfoHeader(*impl, actualFileSize);
 
-        std::size_t colorTableOffset = INFO_HEADER_OFFSET + impl->m_infoHeader.Size;
-        std::size_t bmpColorInfoSize = sizeof(std::uint32_t ); // Bmp Color Structure
 
-        if(impl->m_header.DataOffset < colorTableOffset + impl->m_infoHeader.ColorsUsed * bmpColorInfoSize)
-            throw InvalidBmpHeaderError(std::string("Invalid Data Offset: ") + std::to_string(impl->m_header.DataOffset));
-
-        int padding = RawImageData::calculatePadding(impl->m_infoHeader.Width);
+        const int padding = RawImageData::calculatePadding(impl->m_infoHeader.Width);
 
         // Read Pixel Data
         std::size_t realPixelDataSize = impl->m_infoHeader.ImageSize
@@ -210,34 +353,18 @@ struct BmpProxy::ProxyImpl
         const bool headerReadCorrectly = (fread(&impl->m_header, sizeof(m_header), 1, impl->m_fileHandle) == 1);
         if(!headerReadCorrectly)
             throw InvalidBmpHeaderError();
-        else if(impl->m_header.Signature != COMPRESSED_SIGNATURE) // Check Signature = 'BA'
-            throw InvalidBmpHeaderError(std::string("Unexpected signature: ") + std::to_string(impl->m_header.Signature));
-        else if(impl->m_header.FileSize != actualFileSize)
-            throw InvalidBmpHeaderError(std::string("File size mismatch: ") +
-                "actual[" + std::to_string(actualFileSize) + "] != expected[" + std::to_string(impl->m_header.FileSize) + "]"
-            );
-        else if(impl->m_header.IndexOffset < INFO_HEADER_OFFSET + sizeof(BmpInfoHeader))
-            throw InvalidBmpHeaderError(std::string("Invalid Index Offset: ") + std::to_string(impl->m_header.IndexOffset));
-        else if(impl->m_header.DataOffset < impl->m_header.IndexOffset)
-            throw InvalidBmpHeaderError(std::string("Invalid Data Offset: ") + std::to_string(impl->m_header.DataOffset));
+        else
+            ProxyValidator::validateHeader(*impl, actualFileSize);
 
         // BMP Info Header validation
         const bool infoHeaderReadCorrectly = (fread(&impl->m_infoHeader, sizeof(m_infoHeader), 1, impl->m_fileHandle) == 1);
         if(!infoHeaderReadCorrectly)
             throw InvalidInfoHeaderError();
-        else if(impl->m_infoHeader.Size < sizeof(BmpInfoHeader)) // Can be > sizeof(BmpInfoHeader) in new bmp versions
-            throw InvalidInfoHeaderError(std::string("Incorrect InfoHeader Size: " + std::to_string(impl->m_infoHeader.Size)));
-        else if(impl->m_infoHeader.BitsPerPixel != 8)
-            throw InvalidInfoHeaderError(std::string("Only 8bit Bmp pictures are supported"));
-
-        std::size_t colorTableOffset = INFO_HEADER_OFFSET + impl->m_infoHeader.Size;
-        std::size_t bmpColorInfoSize = sizeof(std::uint32_t ); // Bmp Color Structure
-
-        if(impl->m_header.IndexOffset < colorTableOffset + impl->m_infoHeader.ColorsUsed * bmpColorInfoSize)
-            throw InvalidBmpHeaderError(std::string("Invalid Index Offset: ") + std::to_string(impl->m_header.IndexOffset));
+        else
+            ProxyValidator::validateInfoHeader(*impl, actualFileSize);
 
         // Read Index Data
-        std::vector<std::uint8_t> indexData(impl->m_infoHeader.Height / PocketBook::DynamicBitset::BITS_PER_BLOCK, 0x00);
+        std::vector<std::uint8_t> indexData(DynamicBitset::getNumBlocksRequired(impl->m_infoHeader.Height), 0x00);
         fseek(impl->m_fileHandle, impl->m_header.IndexOffset, SEEK_SET);
         if(fread(indexData.data(), indexData.size(), 1, impl->m_fileHandle) != 1)
             throw InvalidPixelDataError("Unable to read Index Data");
@@ -283,6 +410,15 @@ struct BmpProxy::ProxyImpl
         return m_index.get();
     }
 
+    bool checkCompressedRowIsEmpty(std::size_t _rowIndex) const
+    {
+        const auto * index = getRowIndex();
+        if(!index)
+            return false;
+
+        return index->testRowIsEmpty(_rowIndex);
+    }
+
     bool copyUpToOffset(FILE * _dest, long _offset)
     {
         fseek(m_fileHandle, 0, SEEK_SET);
@@ -301,6 +437,73 @@ struct BmpProxy::ProxyImpl
     std::unique_ptr<RowIndex> m_index;
     std::vector<std::uint8_t> m_pixelData;
 };
+#endif
+
+void BmpProxy::ProxyValidator::validateHeader(BmpProxy::ProxyImpl & _impl, std::size_t _fileSize)
+{
+    const auto * bmpHeader = _impl.getBmpHeader();
+    if(!bmpHeader)
+        throw InvalidBmpHeaderError("Unable to read Header");
+
+    const bool isBmp = (bmpHeader->Signature == UNCOMPRESSED_SIGNATURE);
+    const bool isBarch = (bmpHeader->Signature == COMPRESSED_SIGNATURE);
+
+    if(!isBmp && !isBarch) // Check Signature = 'BM'
+        throw InvalidBmpHeaderError(std::string("Unexpected signature: ") + std::to_string(bmpHeader->Signature));
+
+    if(bmpHeader->FileSize != _fileSize) // Check files size = BmpHeader.FileSize
+        throw InvalidBmpHeaderError(std::string("File size mismatch: ") +
+            "actual[" + std::to_string(_fileSize) + "] != expected[" + std::to_string(bmpHeader->FileSize) + "]"
+        );
+
+    if(bmpHeader->DataOffset < INFO_HEADER_OFFSET + sizeof(BmpInfoHeader)) // Check PixelData offset is valid
+        throw InvalidBmpHeaderError(std::string("Invalid Data Offset: ") + std::to_string(bmpHeader->DataOffset));
+
+    if(isBarch && bmpHeader->IndexOffset == 0) // Check barch index offset is valid
+        throw InvalidBmpHeaderError(std::string("Invalid Index Offset: ") + std::to_string(bmpHeader->IndexOffset));
+
+    if(isBarch && bmpHeader->DataOffset <= bmpHeader->IndexOffset) // Check barch PixelData offset is valid
+        throw InvalidBmpHeaderError(std::string("Invalid Data Offset: ") + std::to_string(bmpHeader->DataOffset));
+}
+
+void BmpProxy::ProxyValidator::validateInfoHeader(BmpProxy::ProxyImpl & _impl, std::size_t _fileSize)
+{
+    const auto * bmpHeader = _impl.getBmpHeader();
+    if(!bmpHeader)
+        throw InvalidBmpHeaderError("Unable to read Header");
+
+    const auto * infoHeader = _impl.getInfoHeader();
+    if(!infoHeader)
+        throw InvalidInfoHeaderError("Unable to read InfoHeader");
+
+    const std::uint32_t size = infoHeader->Size;
+    const std::uint32_t imageSize = infoHeader->ImageSize;
+    const std::uint32_t width = infoHeader->Width;
+    const std::uint32_t height = infoHeader->Height;
+
+    if(size < sizeof(BmpInfoHeader)) // Can be > sizeof(BmpInfoHeader) in new bmp versions
+        throw InvalidInfoHeaderError(std::string("Incorrect InfoHeader Size: " + std::to_string(size)));
+
+    if(infoHeader->BitsPerPixel != 8) // Check bits per pixel = 8
+        throw InvalidInfoHeaderError(std::string("Only 8bit Bmp pictures are supported"));
+
+    const int widthPadding = RawImageData::calculatePadding(width);
+    const bool isBarch = (bmpHeader->Signature == COMPRESSED_SIGNATURE);
+
+    if(isBarch && imageSize == 0)
+        throw InvalidInfoHeaderError(std::string("Unexpected Image Size: " + std::to_string(imageSize)));
+    else if(!isBarch && imageSize != 0 && (height * (width + widthPadding)) != imageSize)
+        throw InvalidInfoHeaderError(std::string("Unexpected Image Size: " + std::to_string(imageSize)));
+
+    std::size_t colorTableOffset = INFO_HEADER_OFFSET + size;
+    std::size_t bmpColorInfoSize = sizeof(std::uint32_t); // Bmp Color Structure
+
+    if(bmpHeader->DataOffset < colorTableOffset + infoHeader->ColorsUsed * bmpColorInfoSize)
+        throw InvalidBmpHeaderError(std::string("Invalid Data Offset: ") + std::to_string(bmpHeader->DataOffset));
+
+    if(isBarch && bmpHeader->IndexOffset < colorTableOffset + infoHeader->ColorsUsed * bmpColorInfoSize)
+        throw InvalidBmpHeaderError(std::string("Invalid Index Offset: ") + std::to_string(bmpHeader->IndexOffset));
+}
 
 BmpProxy::BmpProxy(std::unique_ptr<ProxyImpl> _pImpl)
     : m_pImpl(std::move(_pImpl))
@@ -341,7 +544,7 @@ const BmpInfoHeader& BmpProxy::getInfoHeader() const
 
 bool BmpProxy::isCompressed() const
 {
-    return m_pImpl->m_header.Signature == COMPRESSED_SIGNATURE;
+    return getHeader().Signature == COMPRESSED_SIGNATURE;
 }
 
 std::size_t BmpProxy::getWidth() const
@@ -352,11 +555,6 @@ std::size_t BmpProxy::getWidth() const
 std::size_t BmpProxy::getHeight() const
 {
     return getInfoHeader().Height;
-}
-
-std::uint8_t * BmpProxy::getPixelData()
-{
-    return m_pImpl->getPixelData();
 }
 
 const std::uint8_t * BmpProxy::getPixelData() const
@@ -532,7 +730,7 @@ bool BmpProxy::decompress(const std::string& _outputFilePath, IProgressNotifier 
 
         for(int rowIndex = 0; rowIndex < infoHeader.Height; ++rowIndex)
         {
-            if(m_pImpl->getRowIndex()->testRowIsEmpty(rowIndex))
+            if(m_pImpl->checkCompressedRowIsEmpty(rowIndex))
             {
                 memcpy(currentRowPtr, whiteRowPattern.data(), whiteRowPattern.size());
                 currentRowPtr += whiteRowPattern.size();

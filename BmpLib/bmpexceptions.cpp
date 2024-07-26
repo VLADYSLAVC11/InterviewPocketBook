@@ -14,6 +14,11 @@ FileDoesntExistError::FileDoesntExistError(const std::string &_filePath)
 {
 }
 
+FileOpeningError::FileOpeningError(const std::string & _filePath)
+    : FileError(std::string("File Error: Unable to open ") + _filePath)
+{
+}
+
 FileCreationError::FileCreationError(const std::string &_filePath)
     : FileError(std::string("File Error: Unable to create ") + _filePath + " file")
 {

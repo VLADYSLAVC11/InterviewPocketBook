@@ -32,7 +32,6 @@ public:
     std::size_t getWidth() const;
     std::size_t getHeight() const;
 
-    std::uint8_t * getPixelData();
     const std::uint8_t * getPixelData() const;
     bool provideRawImageData(RawImageData & _out) const;
 
@@ -41,6 +40,7 @@ public:
 
 private:
     struct ProxyImpl;
+    struct ProxyValidator;
     std::unique_ptr<ProxyImpl> m_pImpl;
     BmpProxy(std::unique_ptr<ProxyImpl> _pImpl);
 };

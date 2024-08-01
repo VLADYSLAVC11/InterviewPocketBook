@@ -9,6 +9,11 @@ add_library(Bmp SHARED
         bmputils.h
         dynamicbitset.h
         dynamicbitset.cpp
+        bmpproxyimpl.cpp
+        bmpproxyimpl.h
+        bmprowindex.cpp
+        bmprowindex.h
+
 )
 
 install (TARGETS Bmp

@@ -24,6 +24,7 @@ public:
     ~BmpProxy() noexcept;
 
     const std::string& getFilePath() const;
+    std::size_t getFileSize() const;
     const BmpHeader& getHeader() const;
     const BmpInfoHeader& getInfoHeader() const;
 
@@ -39,7 +40,7 @@ public:
     bool decompress(const std::string& _outputFilePath, IProgressNotifier * _progressNotifier = nullptr);
 
 private:
-    struct ProxyImpl;
+    class ProxyImpl;
     struct ProxyValidator;
     std::unique_ptr<ProxyImpl> m_pImpl;
     BmpProxy(std::unique_ptr<ProxyImpl> _pImpl);

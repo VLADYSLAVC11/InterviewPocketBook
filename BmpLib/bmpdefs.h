@@ -6,6 +6,8 @@
 
 namespace PocketBook {
 
+// BMP Header structures
+
 #pragma pack(push, 1)
 struct BmpHeader
 {
@@ -58,5 +60,15 @@ struct RawImageData
     int Height; // image height in pixels
     const unsigned char * Data; // Pointer to image data. data[j * width + i] is color of pixel in row j and column i.
 };
+
+// Constants
+static constexpr std::size_t    BPM_HEADER_OFFSET        = 0x00;
+static constexpr std::size_t    INFO_HEADER_OFFSET       = sizeof(PocketBook::BmpHeader);
+static constexpr std::uint16_t  UNCOMPRESSED_SIGNATURE   = 0x4D42;
+static constexpr std::uint16_t  COMPRESSED_SIGNATURE     = 0x4142;
+static constexpr std::uint8_t   WHITE_PIXEL              = 0xFF;
+static constexpr std::uint8_t   BLACK_PIXEL              = 0x00;
+static constexpr std::uint32_t  WHITE_4PIXELS            = 0xFFFFFFFF;
+static constexpr std::uint32_t  BLACK_4PIXELS            = 0x00000000;
 
 } // namespace PocketBook

@@ -41,7 +41,6 @@ public:
 
 private:
     class ProxyImpl;
-    struct ProxyValidator;
     std::unique_ptr<ProxyImpl> m_pImpl;
     BmpProxy(std::unique_ptr<ProxyImpl> _pImpl);
 };

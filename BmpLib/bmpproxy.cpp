@@ -9,7 +9,6 @@
 #include <cassert>
 #include <memory.h>
 
-
 namespace
 {
 
@@ -94,8 +93,8 @@ bool BmpProxy::provideRawImageData(RawImageData & _out) const
     if(!pixelData)
         return false;
 
-    _out.Width = getWidth();
-    _out.Height = getHeight();
+    _out.Width = static_cast<int>(getWidth());
+    _out.Height = static_cast<int>(getHeight());
     _out.Data = pixelData;
 
     return true;
@@ -138,7 +137,7 @@ bool BmpProxy::compress(const std::string& _outputFilePath, IProgressNotifier * 
             _progressNotifier->init(0, rawImageData.getActualHeight() << 1);
 
         auto index = BmpRowIndex::createFromRawImageData(rawImageData, _progressNotifier);
-        header.DataOffset = header.IndexOffset + index.getIndexSizeInBytes();
+        header.DataOffset = static_cast<std::uint32_t>(header.IndexOffset + index.getIndexSizeInBytes());
 
         BmpInfoHeader infoHeader = getInfoHeader();
         DynamicBitset compressedPixelData(infoHeader.ImageSize, 0x00);
@@ -148,7 +147,7 @@ bool BmpProxy::compress(const std::string& _outputFilePath, IProgressNotifier * 
         {
             const auto * rawPixels = reinterpret_cast<const std::uint32_t*>(
                 rawImageData.Data + rowIndex * rawImageData.getActualWidth()
-            );
+                );
             if(!index.testRowIsEmpty(rowIndex))
             {
                 for(int blockIndex = 0; blockIndex < rawImageData.getActualWidth() / sizeof(std::uint32_t); ++blockIndex)
@@ -156,25 +155,25 @@ bool BmpProxy::compress(const std::string& _outputFilePath, IProgressNotifier * 
                     std::uint32_t blockValue = *rawPixels;
                     switch(blockValue)
                     {
-                        case BLACK_4PIXELS:
-                            compressedPixelData.set(currentBitPos++, true);
-                            compressedPixelData.set(currentBitPos++, false);
-                            break;
+                    case BLACK_4PIXELS:
+                        compressedPixelData.set(currentBitPos++, true);
+                        compressedPixelData.set(currentBitPos++, false);
+                        break;
 
-                        case WHITE_4PIXELS:
-                            compressedPixelData.set(currentBitPos++, false);
-                            break;
+                    case WHITE_4PIXELS:
+                        compressedPixelData.set(currentBitPos++, false);
+                        break;
 
-                        default:
-                            compressedPixelData.set(currentBitPos++, true);
-                            compressedPixelData.set(currentBitPos++, true);
+                    default:
+                        compressedPixelData.set(currentBitPos++, true);
+                        compressedPixelData.set(currentBitPos++, true);
 
-                            for(int bitIndex = 0; bitIndex < sizeof(std::uint32_t) * DynamicBitset::BITS_PER_BLOCK; ++bitIndex)
-                            {
-                                bool bitValue = (blockValue & (1 << bitIndex)) != 0;
-                                compressedPixelData.set(currentBitPos++, bitValue);
-                            }
-                            break;
+                        for(int bitIndex = 0; bitIndex < sizeof(std::uint32_t) * DynamicBitset::BITS_PER_BLOCK; ++bitIndex)
+                        {
+                            bool bitValue = (blockValue & (1 << bitIndex)) != 0;
+                            compressedPixelData.set(currentBitPos++, bitValue);
+                        }
+                        break;
                     }
 
                     ++rawPixels;
@@ -195,8 +194,8 @@ bool BmpProxy::compress(const std::string& _outputFilePath, IProgressNotifier * 
             return rollbackFile();
 
         compressedPixelData.shrinkToFit();
-        infoHeader.ImageSize = compressedPixelData.numBlocks();
-        header.FileSize = ftell(resultFile) + index.getIndexSizeInBytes() + compressedPixelData.numBlocks();
+        infoHeader.ImageSize = static_cast<std::uint32_t>(compressedPixelData.numBlocks());
+        header.FileSize = static_cast<std::uint32_t>(ftell(resultFile) + index.getIndexSizeInBytes() + compressedPixelData.numBlocks());
 
         // Write index and compressed pixel data
         if(fwrite(index.getData(), index.getIndexSizeInBytes(), 1, resultFile) != 1 ||
@@ -270,7 +269,7 @@ bool BmpProxy::decompress(const std::string& _outputFilePath, IProgressNotifier 
         if(_progressNotifier)
             _progressNotifier->init(0, infoHeader.Height);
 
-        for(int rowIndex = 0; rowIndex < infoHeader.Height; ++rowIndex)
+        for(int rowIndex = 0; rowIndex < static_cast<int>(infoHeader.Height); ++rowIndex)
         {
             const auto * bmpRowIndex = m_pImpl->getRowIndex();
             if(bmpRowIndex && bmpRowIndex->testRowIsEmpty(rowIndex))
@@ -281,7 +280,7 @@ bool BmpProxy::decompress(const std::string& _outputFilePath, IProgressNotifier 
             else
             {
                 int numBytesRestored = 0;
-                while(numBytesRestored < infoHeader.Width + padding)
+                while(numBytesRestored < static_cast<int>(infoHeader.Width + padding))
                 {
                     std::uint32_t block = BLACK_4PIXELS;
                     bool b0 = pixelDataCompressed.test(currentBitPos++);
@@ -321,8 +320,8 @@ bool BmpProxy::decompress(const std::string& _outputFilePath, IProgressNotifier 
         if(!m_pImpl->copyBytesToFile(resultFile, header.DataOffset))
             return rollbackFile();
 
-        infoHeader.ImageSize = resultImageSize;
-        header.FileSize = ftell(resultFile) + resultImageSize;
+        infoHeader.ImageSize = static_cast<std::uint32_t>(resultImageSize);
+        header.FileSize = static_cast<std::uint32_t>(ftell(resultFile) + resultImageSize);
 
         // Write Pixel Data decompressed
         if(fwrite(resultPixelData.data(), resultPixelData.size(), 1, resultFile) != 1 ||

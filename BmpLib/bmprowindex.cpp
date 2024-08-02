@@ -56,7 +56,7 @@ void BmpRowIndex::setRowIsEmpty(std::size_t _row, bool _val)
     }
     else
     {
-        div_t pos = div(_row, DynamicBitset::BITS_PER_BLOCK);
+        auto pos = lldiv(static_cast<long long>(_row), DynamicBitset::BITS_PER_BLOCK);
         m_index.m_data[pos.quot] |= (1 << pos.rem);
     }
 }
@@ -69,7 +69,7 @@ bool BmpRowIndex::testRowIsEmpty(std::size_t _row) const
     if(m_isBitset)
         return m_index.m_bitset->test(_row);
 
-    div_t pos = div(_row, DynamicBitset::BITS_PER_BLOCK);
+    auto pos = lldiv(static_cast<long long>(_row), DynamicBitset::BITS_PER_BLOCK);
     return (m_index.m_data[pos.quot] & (1 << pos.rem)) != 0;
 }
 

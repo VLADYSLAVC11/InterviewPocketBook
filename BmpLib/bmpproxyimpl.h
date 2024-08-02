@@ -2,20 +2,17 @@
 
 #pragma once
 
-#define _BMP_MMAP_OPTIMIZATION_
-
 #include "bmpproxy.h"
 #include "bmpdefs.h"
 
-#if __unix__ and defined(_BMP_MMAP_OPTIMIZATION_)
+#ifdef __unix__
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/mman.h>
 #include <fcntl.h>
 #include <unistd.h>
-#define _USE_MMAP_IMPL_
-#else
-#include <vector>
+#elif _WIN32
+#include <windows.h>
 #endif
 
 namespace PocketBook {
@@ -39,26 +36,26 @@ public:
     const std::uint8_t * getPixelData() const;
     const BmpRowIndex * getRowIndex() const;
 
-    bool copyBytesToFile(FILE * _dest, std::size_t _bytesCount); // TODO : to remove
+    bool copyBytesToFile(FILE * _dest, std::size_t _bytesCount);
 
 private:
+    static void validateHeader(ProxyImpl& _impl, std::size_t _fileSize, bool _isCompressed);
+    static void validateInfoHeader(ProxyImpl& _impl, std::size_t _fileSize);
+
     std::string m_filePath;
     std::size_t m_fileSize = 0;
+    std::unique_ptr<BmpRowIndex> m_index;
 
-#ifdef _USE_MMAP_IMPL_
+#ifdef __unix__
     int m_fileHandle = 0;
-    void * m_pHeader = nullptr;
-    std::uint8_t * getHeaderStart();
-    const std::uint8_t * getHeaderStart() const;
-#else
-    BmpHeader m_header;
-    BmpInfoHeader m_infoHeader;
-    std::vector<std::uint8_t> m_pixelData;
-    FILE * m_fileHandle = nullptr;
+#elif _WIN32
+    HANDLE m_fileHandle = INVALID_HANDLE_VALUE;
+    HANDLE m_fileMappingHandle = 0;
 #endif
 
-    std::unique_ptr<BmpRowIndex> m_index;
+    void * m_pHeader = nullptr;
+    std::uint8_t* getHeaderStart();
+    const std::uint8_t* getHeaderStart() const;
 };
-
 
 } // namespace PocketBook

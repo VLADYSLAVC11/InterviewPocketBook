@@ -27,10 +27,10 @@ DynamicBitset::DynamicBitset(const block_t * _blockPtr, std::size_t _numBlocks)
 
 void DynamicBitset::set(std::size_t _bitIndex, bool _val)
 {
-    div_t pos = div(static_cast<int>(_bitIndex), BITS_PER_BLOCK);
+    auto pos = lldiv(static_cast<long long>(_bitIndex), BITS_PER_BLOCK);
     if(empty())
         m_buffer.resize(1, 0x00);
-    if(pos.quot >= numBlocks())
+    if(pos.quot >= static_cast<long long>(numBlocks()))
         m_buffer.resize(pos.quot << 1, 0x00); // Resize bitset x2 for required bit
 
     m_buffer[pos.quot] |= (std::uint8_t )_val << pos.rem;
@@ -70,7 +70,7 @@ bool DynamicBitset::test(std::size_t _bitIndex) const
     if(_bitIndex >= m_size)
         throw std::out_of_range("Bit index is out of range");
 
-    div_t pos = div(static_cast<int>(_bitIndex), BITS_PER_BLOCK);
+    auto pos = lldiv(static_cast<long long>(_bitIndex), BITS_PER_BLOCK);
     return (m_buffer[pos.quot] & (1 << pos.rem)) != 0;
 }
 

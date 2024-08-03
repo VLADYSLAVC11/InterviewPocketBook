@@ -37,20 +37,23 @@ BmpProxy::ProxyImpl::readFile(const std::string & _filePath, bool _isCompressed)
 #ifdef __unix__
 
     // Open file for reading
-    impl->m_fileHandle = open(_filePath.c_str(), O_RDONLY);
+    auto fileHandle = open(_filePath.c_str(), O_RDONLY);
 
     struct stat statbuf;
 
     // Ensure file exists and possible to read properly
-    if ( impl->m_fileHandle <= 0 || fstat (impl->m_fileHandle, &statbuf) < 0 )
+    if (fileHandle <= 0 || fstat (fileHandle, &statbuf) < 0)
         throw FileDoesntExistError(_filePath);
 
+    impl->m_fileHandle = fileHandle;
     impl->m_fileSize = statbuf.st_size;
 
     // Map opened file to memory
-    impl->m_pHeader = mmap(0, impl->m_fileSize, PROT_READ, MAP_PRIVATE, impl->m_fileHandle, 0);
-    if (impl->m_pHeader == MAP_FAILED)
+    auto headerPtr = mmap(0, impl->m_fileSize, PROT_READ, MAP_PRIVATE, impl->m_fileHandle, 0);
+    if (headerPtr == MAP_FAILED)
         throw FileOpeningError(_filePath);
+
+    impl->m_pHeader = headerPtr;
 
 #elif _WIN32
 
